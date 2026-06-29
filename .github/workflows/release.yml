@@ -2,14 +2,13 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.0.0)'
-        required: true
-        default: 'v1.0.0'
+        description: 'Release version override (e.g. v2.0.0). Leave blank to auto-increment.'
+        required: false
 
 permissions:
   contents: write
@@ -19,15 +18,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history to read existing tags
 
-      - name: Set version
+      - name: Compute next version
         id: ver
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ -n "${{ github.event.inputs.version }}" ]; then
             echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # Find the latest semver tag (vMAJOR.MINOR.PATCH)
+          LATEST=$(git tag --list 'v*.*.*' --sort=-version:refname | head -1)
+
+          if [ -z "$LATEST" ]; then
+            NEXT="v1.0.0"
+          else
+            # Strip leading 'v', split on '.', bump patch
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
+            PATCH=$(( PATCH + 1 ))
+            NEXT="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Latest tag: ${LATEST:-none}  →  Next: $NEXT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -42,7 +57,7 @@ jobs:
             ### Features
             - Zero dependencies — Python 3.8+ stdlib only, nothing to install
             - Dark-themed browser UI at `http://127.0.0.1:8765`
-            - Peek messages with `requeue=true` — **nothing is ever deleted or modified**
+            - Peek messages with `ackmode=ack_requeue_true` — **nothing is ever deleted or modified**
             - Browse all queues, filter messages, auto-refresh, export to JSON
             - Double-click launchers: `start.bat` (Windows), `start.sh` (macOS/Linux)
 
