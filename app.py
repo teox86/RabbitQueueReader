@@ -10,6 +10,7 @@ Read-only viewer — never acknowledges, deletes, or modifies messages.
 import base64
 import json
 import socket
+import ssl
 import struct
 import urllib.error
 import urllib.parse
@@ -181,8 +182,15 @@ class AmqpStreamReader:
     F_BODY   = 3
     F_HEART  = 8
 
-    def __init__(self, host: str, port: int, vhost: str, user: str, password: str):
-        self._sock = socket.create_connection((host, port), timeout=15)
+    def __init__(self, host: str, port: int, vhost: str, user: str, password: str, use_tls: bool = False):
+        raw = socket.create_connection((host, port), timeout=15)
+        if use_tls:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            self._sock = ctx.wrap_socket(raw, server_hostname=host)
+        else:
+            self._sock = raw
         self._sock.settimeout(15)
 
         # Protocol header
@@ -428,6 +436,9 @@ HTML_PAGE = """<!DOCTYPE html>
     <button class="btn btn-primary" onclick="loadMessages()">Load Messages</button>
     <button class="btn btn-secondary" onclick="loadQueues()">Browse Queues</button>
     <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;color:var(--muted);font-size:.85rem;margin:0">
+      <input type="checkbox" id="usetls"/> AMQP TLS
+    </label>
+    <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;color:var(--muted);font-size:.85rem;margin:0">
       <input type="checkbox" id="autorefresh" onchange="toggleAuto()"/> Auto-refresh
     </label>
     <select id="interval" style="width:auto;padding:.4rem">
@@ -474,6 +485,7 @@ function params(){
     pass: document.getElementById('pass').value,
     queue: document.getElementById('queue').value.trim(),
     maxmsg: parseInt(document.getElementById('maxmsg').value)||200,
+    tls: document.getElementById('usetls').checked,
   };
 }
 
@@ -482,7 +494,7 @@ async function loadMessages(){
   if(!p.queue){setStatus('Enter a queue name.',true);return;}
   setStatus('<span class="spinner"></span> Loading…');
   try{
-    const qs = new URLSearchParams({host:p.host,port:p.port,mgmt:p.mgmt,vhost:p.vhost,user:p.user,pass:p.pass,queue:p.queue,count:p.maxmsg});
+    const qs = new URLSearchParams({host:p.host,port:p.port,mgmt:p.mgmt,vhost:p.vhost,user:p.user,pass:p.pass,queue:p.queue,count:p.maxmsg,tls:p.tls});
     const r = await fetch('/api/messages?'+qs);
     const d = await r.json();
     if(d.error){setStatus(d.error,true);return;}
@@ -630,14 +642,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_html(HTML_PAGE)
 
         elif parsed.path == "/api/messages":
-            host     = q("host", "localhost")
+            host      = q("host", "localhost")
             amqp_port = int(q("port", "5672"))
             mgmt_port = int(q("mgmt", "15672"))
-            vhost    = q("vhost", "/")
-            queue    = q("queue")
-            user     = q("user", "guest")
-            password = q("pass", "guest")
-            count    = min(int(q("count", "200")), 5000)
+            vhost     = q("vhost", "/")
+            queue     = q("queue")
+            user      = q("user", "guest")
+            password  = q("pass", "guest")
+            count     = min(int(q("count", "200")), 5000)
+            use_tls   = q("tls", "false").lower() == "true"
 
             try:
                 # Detect queue type so we choose the right reader
@@ -646,7 +659,7 @@ class Handler(BaseHTTPRequestHandler):
                 if qtype == "stream":
                     # Use direct AMQP connection for stream queues
                     try:
-                        reader = AmqpStreamReader(host, amqp_port, vhost, user, password)
+                        reader = AmqpStreamReader(host, amqp_port, vhost, user, password, use_tls=use_tls)
                     except ConnectionRefusedError:
                         self.send_json({"error": (
                             f"Cannot connect to AMQP port {amqp_port} on {host}. "
