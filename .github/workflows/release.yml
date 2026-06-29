@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }} — RabbitMQ Stream Viewer"
+          body: |
+            ## RabbitMQ Stream Viewer ${{ github.ref_name }}
+
+            Read-only web viewer for RabbitMQ queues (including stream queues).
+
+            ### Features
+            - Zero dependencies — Python 3.8+ stdlib only, nothing to install
+            - Dark-themed browser UI at `http://127.0.0.1:8765`
+            - Peek messages with `requeue=true` — **nothing is ever deleted or modified**
+            - Browse all queues, filter messages, auto-refresh, export to JSON
+            - Double-click launchers: `start.bat` (Windows), `start.sh` (macOS/Linux)
+
+            ### Quick start
+            1. Enable the RabbitMQ Management Plugin:
+               ```
+               rabbitmq-plugins enable rabbitmq_management
+               ```
+            2. Double-click `start.bat` (Windows) or `start.sh` (macOS/Linux)
+            3. Browser opens automatically — fill in host, port, credentials, queue name and click **Load Messages**
+          files: |
+            app.py
+            start.bat
+            start.sh
+            README.md
+          draft: false
+          prerelease: false
