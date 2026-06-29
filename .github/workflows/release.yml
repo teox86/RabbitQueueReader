@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
 
 permissions:
   contents: write
@@ -14,12 +20,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ github.ref_name }} — RabbitMQ Stream Viewer"
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: "${{ steps.ver.outputs.version }} — RabbitMQ Stream Viewer"
           body: |
-            ## RabbitMQ Stream Viewer ${{ github.ref_name }}
+            ## RabbitMQ Stream Viewer ${{ steps.ver.outputs.version }}
 
             Read-only web viewer for RabbitMQ queues (including stream queues).
 
