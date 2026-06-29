@@ -645,7 +645,19 @@ class Handler(BaseHTTPRequestHandler):
 
                 if qtype == "stream":
                     # Use direct AMQP connection for stream queues
-                    reader = AmqpStreamReader(host, amqp_port, vhost, user, password)
+                    try:
+                        reader = AmqpStreamReader(host, amqp_port, vhost, user, password)
+                    except ConnectionRefusedError:
+                        self.send_json({"error": (
+                            f"Cannot connect to AMQP port {amqp_port} on {host}. "
+                            "Stream queues require a direct AMQP connection. "
+                            "Check that port 5672 is open and reachable "
+                            "(firewall, VPN, or Docker port mapping may be blocking it)."
+                        )})
+                        return
+                    except OSError as e:
+                        self.send_json({"error": f"AMQP connection failed: {e}"})
+                        return
                     try:
                         msgs = reader.read_messages(queue, count)
                     finally:
