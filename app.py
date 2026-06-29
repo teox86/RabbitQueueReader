@@ -29,12 +29,12 @@ def peek_messages(host: str, mgmt_port: int, vhost: str, queue: str,
     """
     POST /api/queues/{vhost}/{queue}/get  with  requeue=true
     This is the ONLY way to read messages via the management API.
-    requeue=true guarantees messages are never removed from the queue.
+    ackmode=ack_requeue_true guarantees messages are never removed from the queue.
     """
     url = f"http://{host}:{mgmt_port}/api/queues/{urllib.parse.quote(vhost, safe='')}/{urllib.parse.quote(queue, safe='')}/get"
     payload = json.dumps({
         "count": count,
-        "requeue": True,          # ← messages stay in the queue
+        "ackmode": "ack_requeue_true",  # peek only — messages stay in the queue
         "encoding": "auto",
         "truncate": 50000,
     }).encode()
